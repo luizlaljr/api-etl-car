@@ -23,6 +23,8 @@ from starlette.middleware.cors import CORSMiddleware
 
 from render_car import create_pdf_from_geojson, create_kmz_from_geojson
 
+from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
+
 query_timeout = int(os.getenv("QUERY_TIMEOUT", "30"))
 
 DATABASE_HOST = os.getenv("POSTGRES_HOST", "localhost")
@@ -35,9 +37,16 @@ API_KEYS = os.getenv("API_KEYS", "1234,5678").split(",")
 API_KEY_QUERY_NAME = os.getenv("API_KEY_QUERY_NAME", "API_KEY")
 api_key_query = APIKeyQuery(name=API_KEY_QUERY_NAME, auto_error=False)
 
-app = FastAPI(root_path="/api")
+app = FastAPI(
+    title="API Plano Agro",
+    version="1.0",
+    servers=[
+        {"url": "https://api.planoagro.com.br", "description": "Produção"}
+    ]
+)
 
 app.add_middleware(
+    ProxyHeadersMiddleware,
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,

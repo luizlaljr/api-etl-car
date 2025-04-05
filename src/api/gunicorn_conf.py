@@ -7,3 +7,7 @@ bind = os.getenv("GUNICORN_BIND", "0.0.0.0:8000")
 loglevel = os.getenv("GUNICORN_LOGLEVEL", "info")
 accesslog = os.getenv("GUNICORN_ACCESS_LOG", "-")  # Default to stdout
 errorlog = os.getenv("GUNICORN_ERROR_LOG", "-")  # Default to stderr
+
+# Confia nos cabeçalhos X-Forwarded-* vindos do Nginx
+forwarded_allow_ips = "*"
+
