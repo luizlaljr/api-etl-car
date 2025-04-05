@@ -1,0 +1,23 @@
+[2025-04-05 16:23:04 +0000] [1] [INFO] Starting gunicorn 22.0.0
+[2025-04-05 16:23:04 +0000] [1] [INFO] Listening at: http://0.0.0.0:8000 (1)
+[2025-04-05 16:23:04 +0000] [1] [INFO] Using worker: uvicorn.workers.UvicornWorker
+[2025-04-05 16:23:04 +0000] [7] [INFO] Booting worker with pid: 7
+[2025-04-05 16:23:04 +0000] [8] [INFO] Booting worker with pid: 8
+[2025-04-05 16:23:04 +0000] [9] [INFO] Booting worker with pid: 9
+[2025-04-05 16:23:04 +0000] [10] [INFO] Booting worker with pid: 10
+[2025-04-05 16:23:05 +0000] [7] [INFO] Started server process [7]
+[2025-04-05 16:23:05 +0000] [7] [INFO] Waiting for application startup.
+[2025-04-05 16:23:05 +0000] [7] [INFO] ASGI 'lifespan' protocol appears unsupported.
+[2025-04-05 16:23:05 +0000] [7] [INFO] Application startup complete.
+[2025-04-05 16:23:05 +0000] [8] [INFO] Started server process [8]
+[2025-04-05 16:23:05 +0000] [8] [INFO] Waiting for application startup.
+[2025-04-05 16:23:05 +0000] [8] [INFO] ASGI 'lifespan' protocol appears unsupported.
+[2025-04-05 16:23:05 +0000] [8] [INFO] Application startup complete.
+[2025-04-05 16:23:05 +0000] [10] [INFO] Started server process [10]
+[2025-04-05 16:23:05 +0000] [10] [INFO] Waiting for application startup.
+[2025-04-05 16:23:05 +0000] [10] [INFO] ASGI 'lifespan' protocol appears unsupported.
+[2025-04-05 16:23:05 +0000] [10] [INFO] Application startup complete.
+[2025-04-05 16:23:06 +0000] [9] [INFO] Started server process [9]
+[2025-04-05 16:23:06 +0000] [9] [INFO] Waiting for application startup.
+[2025-04-05 16:23:06 +0000] [9] [INFO] ASGI 'lifespan' protocol appears unsupported.
+[2025-04-05 16:23:06 +0000] [9] [INFO] Application startup complete.

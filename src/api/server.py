@@ -23,7 +23,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from render_car import create_pdf_from_geojson, create_kmz_from_geojson
 
-from starlette.middleware.proxy_headers import ProxyHeadersMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 query_timeout = int(os.getenv("QUERY_TIMEOUT", "30"))
 
@@ -45,8 +45,10 @@ app = FastAPI(
     ]
 )
 
+# Adiciona os middlewares separadamente
+app.add_middleware(ProxyHeadersMiddleware)
+
 app.add_middleware(
-    ProxyHeadersMiddleware,
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
