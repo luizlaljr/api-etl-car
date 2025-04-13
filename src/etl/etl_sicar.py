@@ -625,7 +625,16 @@ def get_car(state, theme, out_folder, max_attempts=2):
     for attempt in range(1, max_attempts + 1):
         print(f"[INFO] Baixando {state}-{theme}, tentativa {attempt}")
         try:
-            result = car.download_state(state=state, theme=theme, path=out_folder)
+            result = car.download_state(
+                            state=state,
+                            polygon=theme,
+                            folder=out_folder,
+                            tries=1,
+                            debug=True,
+                            chunk_size=chunk_size,
+                            overwrite=overwrite,
+                            min_download_rate=min_download_rate
+                        )
             if result and result.exists():
                 if result.stat().st_size < 500_000:  
                     print(f"[ERRO] Arquivo baixado está vazio ou corrompido: {result}")
