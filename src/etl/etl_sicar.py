@@ -96,19 +96,35 @@ def extract_zip_to_folder(zip_path, extract_to_folder):
     zip_path = Path(zip_path)
     extract_to_folder = Path(extract_to_folder)
     extract_to_folder.mkdir(parents=True, exist_ok=True)
-    zip_extracted = False
+
+    if not zipfile.is_zipfile(zip_path):
+        print(f"[ERRO] Arquivo baixado não é um ZIP válido: {zip_path}")
+        try:
+            with open(zip_path, "r", encoding="utf-8", errors="ignore") as f:
+                print(f"[DEBUG] Conteúdo do arquivo baixado (primeiros 300 chars):\n{f.read(300)}")
+        except Exception as e:
+            print(f"[ERRO] Falha ao ler o arquivo como texto: {e}")
+
+        try:
+            os.remove(zip_path)
+        except Exception as e:
+            print(f"[ERRO] Falha ao remover o arquivo inválido: {e}")
+        return False
+
     try:
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_to_folder)
-        zip_extracted = True
+        print(f"[INFO] Arquivo extraído com sucesso: {zip_path}")
+        return True
     except Exception as e:
-        print(e)
+        print(f"[ERRO] Falha ao extrair o ZIP: {e}")
+        return False
     finally:
         try:
             os.remove(zip_path)
         except Exception as e:
-            print(e)
-    return zip_extracted
+            print(f"[ERRO] Falha ao remover o ZIP: {e}")
+    
 
 def create_statistics_table():
     conn = connect_db()
@@ -572,7 +588,7 @@ def process_shapefiles_and_save_to_db(extracted_folder, state, theme, release_da
                 print(f"Could not remove file: {e}")
 
 
-def get_car( state, theme, out_folder):
+def get_car(state, theme, out_folder):
     result = False
     car = Sicar(
         use_http2=use_http2,
@@ -581,7 +597,12 @@ def get_car( state, theme, out_folder):
         connect_timeout=timeout,
         headers=get_headers(),
     )
-    while result == False:
+
+    attempt = 1
+    while not result:
+        print(f"[INFO] Baixando {state}-{theme}, tentativa {attempt}")
+        start_time = time.time()
+
         try:
             result = car.download_state(
                 state=state,
@@ -593,10 +614,16 @@ def get_car( state, theme, out_folder):
                 overwrite=overwrite,
                 min_download_rate=min_download_rate
             )
-
+            elapsed = time.time() - start_time
+            if result and result.exists():
+                size = result.stat().st_size
+                print(f"[INFO] Download completo: {result} ({size / (1024 ** 2):.2f} MB) em {elapsed:.2f}s")
+            else:
+                print(f"[ERRO] Arquivo baixado está vazio ou não existe: {result}")
+                result = False
         except Exception as e:
-            print(f"Error in download {state} {theme}: {e}")
-            time.sleep(random.random() + random.random())
+            print(f"[ERRO] Falha no download {state}-{theme}: {e}")
+            time.sleep(random.uniform(1, 3))
             car = Sicar(
                 use_http2=use_http2,
                 proxy=proxy,
@@ -604,8 +631,10 @@ def get_car( state, theme, out_folder):
                 connect_timeout=timeout,
                 headers=get_headers(),
             )
+        attempt += 1
 
     return result
+    
 
 def check_data_exists( state, layer, release_date):
     conn = connect_db()
@@ -708,6 +737,13 @@ def process_state_theme_pair(state, theme, release_dates, done_list):
         done_list["undone"].append((state, theme))
 
 def main():
+
+    print(f"[CONFIG] Timeout: {timeout}s | Chunk Size: {chunk_size} | Overwrite: {overwrite}")
+    print(f"[CONFIG] Proxy Ativo: {use_proxy} - {proxy}")
+    print(f"[CONFIG] Max Download Rate: {min_download_rate} MB/s")
+    print(f"[CONFIG] Max Memory %: {max_memory_percent_to_use} | Batch Size: {max_batch_size}")
+    print(f"[CONFIG] Workers: {max_workers}")
+
     car = Sicar(
         use_http2=use_http2,
         proxy=proxy,
