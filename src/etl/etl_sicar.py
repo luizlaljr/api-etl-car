@@ -612,7 +612,7 @@ def process_shapefiles_and_save_to_db(extracted_folder, state, theme, release_da
                 print(f"Could not remove file: {e}")
 
 
-def get_car(state, theme, out_folder):
+def get_car(state, theme, out_folder, max_attempts=2):
     result = False
     car = Sicar(
         use_http2=use_http2,
@@ -622,42 +622,23 @@ def get_car(state, theme, out_folder):
         headers=get_headers(),
     )
 
-    attempt = 1
-    while not result:
+    for attempt in range(1, max_attempts + 1):
         print(f"[INFO] Baixando {state}-{theme}, tentativa {attempt}")
-        start_time = time.time()
-
         try:
-            result = car.download_state(
-                state=state,
-                polygon=theme,
-                folder=out_folder,
-                tries=1,
-                debug=True,
-                chunk_size=chunk_size,
-                overwrite=overwrite,
-                min_download_rate=min_download_rate
-            )
-            elapsed = time.time() - start_time
+            result = car.download_state(state=state, theme=theme, path=out_folder)
             if result and result.exists():
-                size = result.stat().st_size
-                print(f"[INFO] Download completo: {result} ({size / (1024 ** 2):.2f} MB) em {elapsed:.2f}s")
-            else:
-                print(f"[ERRO] Arquivo baixado está vazio ou não existe: {result}")
-                result = False
+                if result.stat().st_size < 500_000:  
+                    print(f"[ERRO] Arquivo baixado está vazio ou corrompido: {result}")
+                    result.unlink()
+                    continue
+                return result
         except Exception as e:
-            print(f"[ERRO] Falha no download {state}-{theme}: {e}")
-            time.sleep(random.uniform(1, 3))
-            car = Sicar(
-                use_http2=use_http2,
-                proxy=proxy,
-                read_timeout=timeout,
-                connect_timeout=timeout,
-                headers=get_headers(),
-            )
-        attempt += 1
+            print(f"[ERRO] Erro ao baixar {state}-{theme}: {e}")
+        time.sleep(3)
 
-    return result
+    print(f"[FALHA] Falha após {max_attempts} tentativas para {state}-{theme}")
+    return False
+    
     
 
 def check_data_exists( state, layer, release_date):
@@ -747,11 +728,11 @@ def process_state_theme_pair(state, theme, release_dates, done_list):
 
         print("Extracting zip")
         extracted_zip = extract_zip_to_folder(result_path, out_folder)
-        # Se a extração falhar, tenta uma segunda vez baixando novamente
+                
         if not extracted_zip:
             print(f"[WARN] Falha na extração do ZIP. Tentando novo download para {state}-{theme}...")
-            
-            # Remove arquivos da tentativa anterior
+        
+            # Remove o ZIP inválido
             try:
                 if Path(result_path).exists():
                     os.remove(result_path)
@@ -759,8 +740,8 @@ def process_state_theme_pair(state, theme, release_dates, done_list):
             except Exception as e:
                 print(f"[ERRO] Não foi possível remover ZIP corrompido: {e}")
         
-            # Nova tentativa de download
-            result = get_car(state, theme, out_folder)
+            # Segunda tentativa de download
+            result = get_car(state, theme, out_folder, max_attempts=1)
             if not result:
                 print(f"[ERRO] Segunda tentativa de download falhou: {state}-{theme}")
                 done_list["undone"].append((state, theme))
@@ -774,6 +755,7 @@ def process_state_theme_pair(state, theme, release_dates, done_list):
                 print(f"[ERRO] Segunda tentativa de extração também falhou: {state}-{theme}")
                 done_list["undone"].append((state, theme))
                 return
+                
 
         print("Creating schema and table")
         create_partition_and_table(state, theme)
@@ -807,7 +789,7 @@ def main():
     release_dates = car.get_release_dates()
 
     # Define retries
-    max_retries = 3
+    max_retries = 1
     current_states = list(states)
     current_themes = list(themes)
 
