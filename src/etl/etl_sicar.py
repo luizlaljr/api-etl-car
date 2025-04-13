@@ -756,6 +756,7 @@ def process_state_theme_pair(state, theme, release_dates, done_list):
         print(f"Error processing {state}, {theme}: {e}")
         done_list["undone"].append((state, theme))
 
+    
 def main():
 
     print(f"[CONFIG] Timeout: {timeout}s | Chunk Size: {chunk_size} | Overwrite: {overwrite}")
@@ -769,36 +770,69 @@ def main():
         proxy=proxy,
         read_timeout=timeout,
         connect_timeout=timeout,
-        headers=get_headers())
+        headers=get_headers()
+    )
 
     create_database()
     create_statistics_table()
     release_dates = car.get_release_dates()
 
-    # Use a Manager to create a shared done_list dictionary
-    with Manager() as manager:
-        done_list = manager.dict()
-        done_list["undone"] = manager.list()
-        done_list["done"] = manager.list()
+    # Define retries
+    max_retries = 3
+    current_states = list(states)
+    current_themes = list(themes)
 
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
-            for state in states:
-                for theme in themes:
-                    print(f"Submitting task for {state}, {theme}")
-                    futures.append(executor.submit(process_state_theme_pair, state, theme, release_dates, done_list))
+    final_undone = []
 
-            for future in as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"Error during processing: {e}")
+    for attempt in range(1, max_retries + 1):
+        print(f"\n[INFO] Iniciando tentativa {attempt}/{max_retries} com {len(current_states) * len(current_themes)} pares...")
 
-        if len(done_list["undone"]) == 0:
-            time.sleep(3600)
-            return True
-        time.sleep(60)
-        return False
+        with Manager() as manager:
+            done_list = manager.dict()
+            done_list["undone"] = manager.list()
+            done_list["done"] = manager.list()
 
-if __name__=="__main__":
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                futures = []
+                future_to_pair = {}
+
+                for state in current_states:
+                    for theme in current_themes:
+                        future = executor.submit(process_state_theme_pair, state, theme, release_dates, done_list)
+                        futures.append(future)
+                        future_to_pair[future] = (state, theme)
+
+                for future in as_completed(futures):
+                    state, theme = future_to_pair[future]
+                    try:
+                        future.result()
+                        done_list["done"].append((state, theme))
+                    except Exception as e:
+                        print(f"[ERROR] Falha ao processar ({state}, {theme}): {e}")
+                        done_list["undone"].append((state, theme))
+
+            if len(done_list["undone"]) == 0:
+                print("[SUCCESS] Todos os pares foram processados com sucesso.")
+                break
+
+            # Prepara os pares que falharam para próxima tentativa
+            current_states, current_themes = zip(*done_list["undone"]) if done_list["undone"] else ([], [])
+            final_undone = list(done_list["undone"])
+            print(f"[WARN] {len(final_undone)} pares falharam na tentativa {attempt}. Nova tentativa em 60s...")
+            time.sleep(60)
+
+    # Log final
+    print("\n[INFO] Processamento finalizado.")
+    if len(final_undone) == 0:
+        print("[INFO] Todos os estados e temas foram processados com sucesso.")
+    else:
+        print(f"[WARN] Alguns pares falharam mesmo após {max_retries} tentativas ({len(final_undone)}):")
+        for state, theme in final_undone:
+            print(f"  - Falhou: {state} - {theme}")
+
+    print("[INFO] Encerrando o container com status de sucesso.")
+    exit(0)
+
+if __name__ == "__main__":
     main()
+    
