@@ -23,7 +23,9 @@ RUN apt update && apt install -y \
     git \
     curl \
     squid \
-    libgl1-mesa-dev && rm -rf /var/lib/apt/lists/*
+    libgl1-mesa-dev \
+    p7zip-full && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set GDAL environment variables
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
