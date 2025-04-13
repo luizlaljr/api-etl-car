@@ -1,11 +1,12 @@
 FROM ubuntu:latest
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
+# Evita prompts durante a instalação de pacotes
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
 ENV VENV_PATH=/opt/venv
 
-# Install system dependencies
+# Instala dependências do sistema
+# Separado do COPY para aproveitar cache entre builds
 RUN apt update && apt install -y \
     software-properties-common \
     build-essential \
@@ -27,27 +28,26 @@ RUN apt update && apt install -y \
     p7zip-full && \
     rm -rf /var/lib/apt/lists/*
 
-# Set GDAL environment variables
+# Variáveis de ambiente GDAL
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
-# Create a virtual environment and activate it
+# Cria e ativa o venv
 RUN python3 -m venv $VENV_PATH
 ENV PATH="$VENV_PATH/bin:$PATH"
 
-# Get GDAL version and install within the venv
+# Copia apenas o requirements.txt primeiro, para aproveitar cache
+COPY src/etl/requirements.txt /app/requirements.txt
+
+# Instala GDAL na versão certa antes do restante dos pacotes
 RUN export GDAL_VERSION=$(gdal-config --version | awk -F. '{print $1"."$2"."$3}') && \
     echo "Detected GDAL version: $GDAL_VERSION" && \
-    pip install --no-cache-dir gdal==$GDAL_VERSION
+    pip install --no-cache-dir gdal==$GDAL_VERSION && \
+    pip install --no-cache-dir -r /app/requirements.txt
 
-# Set working directory
+# Copia o restante dos arquivos
+COPY src/etl /app
 WORKDIR /app
 
-# Copy project files
-COPY src/etl /app
-
-# Install Python dependencies inside venv
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Run the ETL script using the venv Python
+# Executa o script
 CMD bash -c "service squid restart && $VENV_PATH/bin/python /app/etl_sicar.py"
