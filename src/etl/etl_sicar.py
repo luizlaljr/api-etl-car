@@ -94,58 +94,62 @@ def get_headers():
     }
 
 
-    
 def extract_zip_to_folder(zip_path, extract_to_folder):
-    zip_path = Path(zip_path)
-    extract_to_folder = Path(extract_to_folder)
-    extract_to_folder.mkdir(parents=True, exist_ok=True)
-
-    try:
-        print(f"[INFO] Tentando extrair com zipfile: {zip_path}")
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(extract_to_folder)
-        print(f"[INFO] Extração concluída com sucesso (zipfile): {zip_path}")
-        return True
-
-    except zipfile.BadZipFile:
-        print(f"[ERRO] zipfile.BadZipFile: arquivo não é um ZIP válido: {zip_path}")
-    except RuntimeError as e:
-        print(f"[ERRO] RuntimeError ao extrair ZIP: {e}")
-    except Exception as e:
-        print(f"[ERRO] Erro inesperado ao extrair o ZIP com zipfile: {e}")
-
-    # DEBUG do conteúdo do ZIP
-    try:
-        with open(zip_path, "rb") as f:
-            content = f.read(300)
-            print(f"[DEBUG] Início do conteúdo (hex): {content[:100].hex(' ')}")
-        print(f"[DEBUG] Tamanho do arquivo ZIP: {zip_path.stat().st_size / (1024*1024):.2f} MB")
-    except Exception as e:
-        print(f"[DEBUG] Falha ao ler conteúdo para debug: {e}")
-
-    # Fallback com 7z
-    try:
-        print(f"[INFO] Tentando fallback com '7z' (suporte a Deflate64)...")
-        subprocess.run(["7z", "x", str(zip_path), f"-o{str(extract_to_folder)}", "-y"], check=True)
-        print(f"[INFO] Extração concluída com sucesso (7z fallback): {zip_path}")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"[ERRO] Fallback com 7z falhou: {e}")
-    except FileNotFoundError:
-        print(f"[ERRO] '7z' não está instalado no sistema.")
-
-    # Limpeza do arquivo inválido
-    finally:
+        zip_path = Path(zip_path)
+        extract_to_folder = Path(extract_to_folder)
+        extract_to_folder.mkdir(parents=True, exist_ok=True)
+    
         try:
-            os.remove(zip_path)
-            print(f"[INFO] Arquivo ZIP removido: {zip_path}")
+            print(f"[INFO] Tentando extrair com zipfile: {zip_path}")
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                bad_file = zip_ref.testzip()
+                if bad_file:
+                    raise zipfile.BadZipFile(f"Arquivo corrompido internamente: {bad_file}")
+                zip_ref.extractall(extract_to_folder)
+            print(f"[INFO] Extração concluída com sucesso (zipfile): {zip_path}")
+            return True
+    
+        except zipfile.BadZipFile as e:
+            print(f"[ERRO] zipfile.BadZipFile: {e}")
+        except RuntimeError as e:
+            print(f"[ERRO] RuntimeError ao extrair ZIP: {e}")
         except Exception as e:
-            print(f"[ERRO] Falha ao remover o ZIP: {e}")
-
-    return False
+            print(f"[ERRO] Erro inesperado ao extrair o ZIP com zipfile: {e}")
+    
+        # DEBUG do conteúdo do ZIP
+        try:
+            with open(zip_path, "rb") as f:
+                content = f.read(300)
+                print(f"[DEBUG] Início do conteúdo (hex): {content[:100].hex(' ')}")
+            print(f"[DEBUG] Tamanho do arquivo ZIP: {zip_path.stat().st_size / (1024*1024):.2f} MB")
+        except Exception as e:
+            print(f"[DEBUG] Falha ao ler conteúdo para debug: {e}")
+    
+        # Fallback com 7z
+        try:
+            print(f"[INFO] Testando integridade com '7z t'...")
+            subprocess.run(["7z", "t", str(zip_path)], check=True)
+            print(f"[INFO] Arquivo passou no teste de integridade com 7z.")
+    
+            print(f"[INFO] Tentando extrair com '7z' (suporte a Deflate64)...")
+            subprocess.run(["7z", "x", str(zip_path), f"-o{str(extract_to_folder)}", "-y"], check=True)
+            print(f"[INFO] Extração concluída com sucesso (7z fallback): {zip_path}")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"[ERRO] Fallback com 7z falhou: {e}")
+        except FileNotFoundError:
+            print(f"[ERRO] '7z' não está instalado no sistema.")
+    
+        finally:
+            try:
+                os.remove(zip_path)
+                print(f"[INFO] Arquivo ZIP removido: {zip_path}")
+            except Exception as e:
+                print(f"[ERRO] Falha ao remover o ZIP: {e}")
+    
+        return False
     
     
-
 def create_statistics_table():
     conn = connect_db()
     cursor = conn.cursor()
@@ -743,8 +747,33 @@ def process_state_theme_pair(state, theme, release_dates, done_list):
 
         print("Extracting zip")
         extracted_zip = extract_zip_to_folder(result_path, out_folder)
+        # Se a extração falhar, tenta uma segunda vez baixando novamente
         if not extracted_zip:
-            raise Exception("zip not extractable")
+            print(f"[WARN] Falha na extração do ZIP. Tentando novo download para {state}-{theme}...")
+            
+            # Remove arquivos da tentativa anterior
+            try:
+                if Path(result_path).exists():
+                    os.remove(result_path)
+                    print(f"[INFO] ZIP anterior removido para novo download: {result_path}")
+            except Exception as e:
+                print(f"[ERRO] Não foi possível remover ZIP corrompido: {e}")
+        
+            # Nova tentativa de download
+            result = get_car(state, theme, out_folder)
+            if not result:
+                print(f"[ERRO] Segunda tentativa de download falhou: {state}-{theme}")
+                done_list["undone"].append((state, theme))
+                return
+        
+            result_path = result.as_posix()
+            print("Segunda tentativa: extraindo novo zip...")
+            extracted_zip = extract_zip_to_folder(result_path, out_folder)
+        
+            if not extracted_zip:
+                print(f"[ERRO] Segunda tentativa de extração também falhou: {state}-{theme}")
+                done_list["undone"].append((state, theme))
+                return
 
         print("Creating schema and table")
         create_partition_and_table(state, theme)
