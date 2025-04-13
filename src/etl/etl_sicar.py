@@ -18,6 +18,7 @@ from random_user_agent.params import SoftwareName, OperatingSystem
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from multiprocessing import Manager
+import subprocess
 
 out_root_folder = os.getenv("OUT_ROOT_FOLDER", "/tmp")
 max_memory_percent_to_use = float(os.getenv("MAX_MEMORY_PERCENT_TO_USE", 0.01))
@@ -92,38 +93,57 @@ def get_headers():
         "Sec-Fetch-Site": "same-origin",
     }
 
+
+    
 def extract_zip_to_folder(zip_path, extract_to_folder):
     zip_path = Path(zip_path)
     extract_to_folder = Path(extract_to_folder)
     extract_to_folder.mkdir(parents=True, exist_ok=True)
 
-    if not zipfile.is_zipfile(zip_path):
-        print(f"[ERRO] Arquivo baixado não é um ZIP válido: {zip_path}")
-        try:
-            with open(zip_path, "r", encoding="utf-8", errors="ignore") as f:
-                print(f"[DEBUG] Conteúdo do arquivo baixado (primeiros 300 chars):\n{f.read(300)}")
-        except Exception as e:
-            print(f"[ERRO] Falha ao ler o arquivo como texto: {e}")
-
-        try:
-            os.remove(zip_path)
-        except Exception as e:
-            print(f"[ERRO] Falha ao remover o arquivo inválido: {e}")
-        return False
-
     try:
+        print(f"[INFO] Tentando extrair com zipfile: {zip_path}")
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_to_folder)
-        print(f"[INFO] Arquivo extraído com sucesso: {zip_path}")
+        print(f"[INFO] Extração concluída com sucesso (zipfile): {zip_path}")
         return True
+
+    except zipfile.BadZipFile:
+        print(f"[ERRO] zipfile.BadZipFile: arquivo não é um ZIP válido: {zip_path}")
+    except RuntimeError as e:
+        print(f"[ERRO] RuntimeError ao extrair ZIP: {e}")
     except Exception as e:
-        print(f"[ERRO] Falha ao extrair o ZIP: {e}")
-        return False
+        print(f"[ERRO] Erro inesperado ao extrair o ZIP com zipfile: {e}")
+
+    # DEBUG do conteúdo do ZIP
+    try:
+        with open(zip_path, "rb") as f:
+            content = f.read(300)
+            print(f"[DEBUG] Início do conteúdo (hex): {content[:100].hex(' ')}")
+        print(f"[DEBUG] Tamanho do arquivo ZIP: {zip_path.stat().st_size / (1024*1024):.2f} MB")
+    except Exception as e:
+        print(f"[DEBUG] Falha ao ler conteúdo para debug: {e}")
+
+    # Fallback com 7z
+    try:
+        print(f"[INFO] Tentando fallback com '7z' (suporte a Deflate64)...")
+        subprocess.run(["7z", "x", str(zip_path), f"-o{str(extract_to_folder)}", "-y"], check=True)
+        print(f"[INFO] Extração concluída com sucesso (7z fallback): {zip_path}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"[ERRO] Fallback com 7z falhou: {e}")
+    except FileNotFoundError:
+        print(f"[ERRO] '7z' não está instalado no sistema.")
+
+    # Limpeza do arquivo inválido
     finally:
         try:
             os.remove(zip_path)
+            print(f"[INFO] Arquivo ZIP removido: {zip_path}")
         except Exception as e:
             print(f"[ERRO] Falha ao remover o ZIP: {e}")
+
+    return False
+    
     
 
 def create_statistics_table():
